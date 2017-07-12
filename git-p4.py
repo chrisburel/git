@@ -2675,7 +2675,7 @@ class P4Sync(Command, P4UserMap):
         self.stream_have_file_info = True
 
     # Stream directly from "p4 files" into "git fast-import"
-    def streamP4Files(self, files):
+    def streamP4Files(self, files change=None):
         filesForCommit = []
         filesToRead = []
         filesToDelete = []
@@ -2700,7 +2700,12 @@ class P4Sync(Command, P4UserMap):
             def streamP4FilesCbSelf(entry):
                 self.streamP4FilesCb(entry)
 
-            fileArgs = ['%s#%s' % (f['path'], f['rev']) for f in filesToRead]
+            if change is not None:
+                # Get p4print to print the file as of revision `change`.  This
+                # works for getting a copy of files in a shelved changelist
+                fileArgs = ['%s@=%s' % (f['path'], change) for f in filesToRead]
+            else:
+                fileArgs = ['%s#%s' % (f['path'], f['rev']) for f in filesToRead]
 
             p4CmdList(["-x", "-", "print"],
                       stdin=fileArgs,
@@ -2812,7 +2817,11 @@ class P4Sync(Command, P4UserMap):
                 print "parent %s" % parent
             self.gitStream.write("from %s\n" % parent)
 
-        self.streamP4Files(files)
+        if details['status'] == 'pending':
+            # Import a shelved changelist
+            self.streamP4Files(files, change=details['change'])
+        else:
+            self.streamP4Files(files)
         self.gitStream.write("\n")
 
         change = int(details["change"])
